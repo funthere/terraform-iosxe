@@ -49,6 +49,21 @@ func validateInterfaceType(v interface{}, k string) (ws []string, es []error) {
 	}
 	return warns, errs
 }
+func validateStringWhiteSpace(v interface{}, k string) (ws []string, es []error) {
+
+	var errs []error
+	var warns []string
+	value, ok := v.(string)
+	if !ok {
+		errs = append(errs, fmt.Errorf("Expected name to be string"))
+		return warns, errs
+	}
+	if strings.Contains(value, " ") {
+		errs = append(errs, fmt.Errorf("Value cannot contain whitespace"))
+		return warns, errs
+	}
+	return warns, errs
+}
 
 func resourceItem() *schema.Resource {
 	fmt.Print()
@@ -91,9 +106,10 @@ func resourceItem() *schema.Resource {
 				Optional:    true,
 			},
 			"ipv4_address": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "IPv4",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Description:  "IPv4",
+				RequiredWith: []string{"ipv4_address_mask"},
 			},
 			"ipv4_address_mask": {
 				Type:        schema.TypeString,
@@ -110,14 +126,16 @@ func resourceItem() *schema.Resource {
 				Optional: true,
 			},
 			"service_policy_input": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "Service Policy Input",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Description:  "Service Policy Input",
+				ValidateFunc: validateStringWhiteSpace,
 			},
 			"service_policy_output": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "Service Policy output",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Description:  "Service Policy output",
+				ValidateFunc: validateStringWhiteSpace,
 			},
 		},
 		Create: resourceCreateItem,
