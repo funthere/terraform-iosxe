@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
 	"log"
 
 	"github.com/meirizal/terraform-experiment/api/server"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 func main() {
@@ -26,8 +30,24 @@ func main() {
 		}
 	}
 
-	itemService := server.NewService("localhost:3001", items)
-	err := itemService.ListenAndServe()
+	// --------- db no-sql ---------
+	mongoCtx := context.TODO()
+	opts := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, err := mongo.Connect(mongoCtx, opts)
+	if err != nil {
+		panic(err)
+	}
+
+	defer client.Disconnect(mongoCtx)
+
+	if err = client.Ping(mongoCtx, readpref.Primary()); err != nil { // ping connection
+		panic(err)
+	}
+	db := client.Database("dd_ios") // connect to db name
+
+	itemService := server.NewService("localhost:3001", items, db)
+
+	err = itemService.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}

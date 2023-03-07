@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,22 +14,26 @@ import (
 	"html/template"
 
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/ssh"
 )
 
 type Item struct {
-	Host                string `json:"host"`
-	Description         string `json:"description"`
-	Username            string `json:"username"`
-	Password            string `json:"password"`
-	IntfType            string `json:"type"`
-	Number              string `json:"number"`
-	Ipv4Address         string `json:"ipv4_address"`
-	Ipv4AddressMask     string `json:"ipv4_address_mask"`
-	Mtu                 int    `json:"mtu"`
-	Shutdown            bool   `json:"shutdown"`
-	ServicePolicyInput  string `json:"service_policy_input"`
-	ServicePolicyOutput string `json:"service_policy_output"`
+	ID                  primitive.ObjectID `bson:"_id" json:"-"`
+	Host                string             `json:"host"`
+	Description         string             `json:"description"`
+	Username            string             `json:"username"`
+	Password            string             `json:"password"`
+	IntfType            string             `json:"type"`
+	Number              string             `json:"number"`
+	Ipv4Address         string             `json:"ipv4_address"`
+	Ipv4AddressMask     string             `json:"ipv4_address_mask"`
+	Mtu                 int                `json:"mtu"`
+	Shutdown            bool               `json:"shutdown"`
+	ServicePolicyInput  string             `json:"service_policy_input"`
+	ServicePolicyOutput string             `json:"service_policy_output"`
 }
 
 const templateFile = "api/template/iosxe_interface_ethernet.cfg"
@@ -38,7 +43,21 @@ const templateFileDelete = "api/template/iosxe_interface_ethernet_delete.cfg"
 func (s *Service) GetItems(w http.ResponseWriter, r *http.Request) {
 	s.RLock()
 	defer s.RUnlock()
-	err := json.NewEncoder(w).Encode(s.items)
+
+	item := Item{}
+	filterConfigDB := bson.M{}
+	opts := options.Distinct().SetMaxTime(2 * time.Second)
+	values, err := s.db.Collection("config_log").Distinct(context.TODO(), "host", filterConfigDB, opts)
+	// cursor, err := s.db.Collection("config_log").Find(context.TODO(), filterConfigDB, opts)
+	if err != nil && err.Error() != "mongo: no documents in result" {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	for _, result := range values {
+		fmt.Println(result)
+	}
+	s.items[item.Host] = item
+	err = json.NewEncoder(w).Encode(s.items)
 	if err != nil {
 		log.Println(err)
 	}
@@ -65,15 +84,6 @@ func (s *Service) PostItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.Lock()
-	defer s.Unlock()
-
-	// if s.itemExists(item.Host) {
-	// 	http.Error(w, fmt.Sprintf("item %s already exists", item.Host), http.StatusBadRequest)
-	// 	return
-	// }
-
-	s.items[item.Host] = item
 	log.Printf("added item: %s", item.Host)
 	err = json.NewEncoder(w).Encode(item)
 	if err != nil {
@@ -95,6 +105,13 @@ func (s *Service) PostItem(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error when running command - %s", err)
 	}
 
+	item.ID = primitive.NewObjectID()
+	_, err = s.db.Collection("config_log").InsertOne(context.TODO(), item)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
 	return
 }
 
@@ -108,6 +125,7 @@ func (s *Service) PutItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var item Item
+	var old Item
 	if r.Body == nil {
 		http.Error(w, "Please send a request body", http.StatusBadRequest)
 		return
@@ -115,15 +133,6 @@ func (s *Service) PutItem(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&item)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
-		return
-	}
-
-	s.Lock()
-	defer s.Unlock()
-
-	if !s.itemExists(itemName) {
-		log.Printf("item %s does not exist", itemName)
-		http.Error(w, fmt.Sprintf("item %v does not exist", itemName), http.StatusBadRequest)
 		return
 	}
 
@@ -143,7 +152,25 @@ func (s *Service) PutItem(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error when running command - %s", err)
 	}
 
-	s.items[itemName] = item
+	// Get existing data first, then update.
+	filterConfigDB := bson.M{"host": itemName}
+	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
+	err = s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).Decode(&old)
+
+	if err != nil {
+		log.Printf(err.Error())
+		http.Error(w, fmt.Sprintf("item %v does not exist", itemName), http.StatusBadRequest)
+		return
+	}
+
+	filterConfigDB = bson.M{"host": itemName, "_id": old.ID}
+	item.ID = old.ID
+	_, err = s.db.Collection("config_log").ReplaceOne(context.TODO(), filterConfigDB, item)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
 	log.Printf("updated item: %s", item.Host)
 	err = json.NewEncoder(w).Encode(item)
 	if err != nil {
@@ -211,14 +238,17 @@ func (s *Service) GetItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.RLock()
-	defer s.RUnlock()
-	if !s.itemExists(itemName) {
-		http.Error(w, "not found", http.StatusNotFound)
+	item := Item{}
+	filterConfigDB := bson.M{"host": itemName}
+	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
+	err := s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).
+		Decode(&item)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	err := json.NewEncoder(w).Encode(s.items[itemName])
+	err = json.NewEncoder(w).Encode(item)
 	if err != nil {
 		log.Println(err)
 		return
@@ -228,7 +258,15 @@ func (s *Service) GetItem(w http.ResponseWriter, r *http.Request) {
 // itemExists checks if an item exists in or not. Does not lock access to the itemService, expects this to
 // be done by the calling method
 func (s *Service) itemExists(itemName string) bool {
-	if _, ok := s.items[itemName]; ok {
+	item := Item{}
+	filterConfigDB := bson.M{"host": itemName}
+	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
+	err := s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).
+		Decode(&item)
+	if err != nil {
+		return false
+	}
+	if item.Host != "" {
 		return true
 	}
 	return false

@@ -6,21 +6,24 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Service holds the map of items and provides methods CRUD operations on the map
 type Service struct {
 	connectionString string
 	items            map[string]Item
+	db               *mongo.Database
 	sync.RWMutex
 }
 
 // NewService returns a Service with a connectionString configured and can be a map of items setup. The items map can be empty,
 // or can contain items
-func NewService(connectionString string, items map[string]Item) *Service {
+func NewService(connectionString string, items map[string]Item, db *mongo.Database) *Service {
 	return &Service{
 		connectionString: connectionString,
 		items:            items,
+		db:               db,
 	}
 }
 

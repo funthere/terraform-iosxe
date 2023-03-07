@@ -5,6 +5,6 @@ provider "ductus/local/dd" {
   version     = "0.0.2"
   constraints = ">= 0.0.2"
   hashes = [
-    "h1:bxy1tS+IqXlBq4DNME3O7S22B0KnU7HEqYbS3hnkJzE=",
+    "h1:2jJ84aWfN9HLwt8ydT2qYEQHLrIO3L9gwOAd/PLTGmE=",
   ]
 }
