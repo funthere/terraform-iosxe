@@ -12,7 +12,6 @@ import (
 // Service holds the map of items and provides methods CRUD operations on the map
 type Service struct {
 	connectionString string
-	items            map[string]Item
 	db               *mongo.Database
 	sync.RWMutex
 }
@@ -22,7 +21,6 @@ type Service struct {
 func NewService(connectionString string, items map[string]Item, db *mongo.Database) *Service {
 	return &Service{
 		connectionString: connectionString,
-		items:            items,
 		db:               db,
 	}
 }

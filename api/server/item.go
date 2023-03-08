@@ -21,7 +21,7 @@ import (
 )
 
 type Item struct {
-	ID                  primitive.ObjectID `bson:"_id" json:"-"`
+	ID                  primitive.ObjectID `bson:"_id" json:"id"`
 	Host                string             `json:"host"`
 	Description         string             `json:"description"`
 	Username            string             `json:"username"`
@@ -30,8 +30,8 @@ type Item struct {
 	Number              string             `json:"number"`
 	Ipv4Address         string             `json:"ipv4_address"`
 	Ipv4AddressMask     string             `json:"ipv4_address_mask"`
-	Mtu                 int                `json:"mtu"`
-	Shutdown            bool               `json:"shutdown"`
+	Mtu                 int                `json:"mtu,omitempty"`
+	Shutdown            bool               `json:"shutdown,omitempty"`
 	ServicePolicyInput  string             `json:"service_policy_input"`
 	ServicePolicyOutput string             `json:"service_policy_output"`
 }
@@ -41,23 +41,9 @@ const templateFileDelete = "api/template/iosxe_interface_ethernet_delete.cfg"
 
 // GetItems returns all of the Items that exist in the server
 func (s *Service) GetItems(w http.ResponseWriter, r *http.Request) {
-	s.RLock()
-	defer s.RUnlock()
-
-	item := Item{}
-	filterConfigDB := bson.M{}
-	opts := options.Distinct().SetMaxTime(2 * time.Second)
-	values, err := s.db.Collection("config_log").Distinct(context.TODO(), "host", filterConfigDB, opts)
-	// cursor, err := s.db.Collection("config_log").Find(context.TODO(), filterConfigDB, opts)
-	if err != nil && err.Error() != "mongo: no documents in result" {
-		http.Error(w, err.Error(), 400)
-		return
-	}
-	for _, result := range values {
-		fmt.Println(result)
-	}
-	s.items[item.Host] = item
-	err = json.NewEncoder(w).Encode(s.items)
+	// item := Item{}
+	// s.items[item.Host] = item
+	err := json.NewEncoder(w).Encode(map[string]Item{})
 	if err != nil {
 		log.Println(err)
 	}
@@ -84,12 +70,6 @@ func (s *Service) PostItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("added item: %s", item.Host)
-	err = json.NewEncoder(w).Encode(item)
-	if err != nil {
-		log.Printf("error sending response - %s", err)
-	}
-
 	// Load config with template
 	commands := loadConfig(item, templateFile)
 
@@ -110,6 +90,12 @@ func (s *Service) PostItem(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), 400)
 		return
+	}
+
+	log.Printf("added item: %s", item.Host)
+	err = json.NewEncoder(w).Encode(item)
+	if err != nil {
+		log.Printf("error sending response - %s", err)
 	}
 
 	return
@@ -153,7 +139,7 @@ func (s *Service) PutItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get existing data first, then update.
-	filterConfigDB := bson.M{"host": itemName}
+	filterConfigDB := bson.M{"host": itemName, "type": item.IntfType, "number": item.Number}
 	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
 	err = s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).Decode(&old)
 
@@ -197,13 +183,6 @@ func (s *Service) DeleteItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	s.Lock()
-	defer s.Unlock()
-
-	if !s.itemExists(itemName) {
-		http.Error(w, fmt.Sprintf("item %s does not exists", itemName), http.StatusNotFound)
-		return
-	}
 
 	defer TimeTrack(time.Now(), "Operations")
 	// Load config with template
@@ -221,7 +200,23 @@ func (s *Service) DeleteItem(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error when running command - %s", err)
 	}
 
-	delete(s.items, itemName)
+	// Get existing data first, then update.
+	filterConfigDB := bson.M{"host": itemName, "type": item.IntfType, "number": item.Number}
+	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
+	err = s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).Decode(&item)
+
+	if err != nil {
+		log.Printf(err.Error())
+		http.Error(w, fmt.Sprintf("item %v does not exist", itemName), http.StatusBadRequest)
+		return
+	}
+
+	filterConfigDB = bson.M{"host": itemName, "_id": item.ID}
+	_, err = s.db.Collection("config_log").DeleteOne(context.TODO(), filterConfigDB)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
 
 	_, err = fmt.Fprintf(w, "Deleted item with name %s", itemName)
 	if err != nil {
@@ -238,13 +233,17 @@ func (s *Service) GetItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item := Item{}
+	var item Item
 	filterConfigDB := bson.M{"host": itemName}
 	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
 	err := s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).
 		Decode(&item)
-	if err != nil {
+	if err != nil && err.Error() != "mongo: no documents in result" {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if item.Host == "" {
+		json.NewEncoder(w).Encode(nil)
 		return
 	}
 
