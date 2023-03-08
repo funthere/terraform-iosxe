@@ -254,8 +254,6 @@ func (s *Service) GetItem(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// itemExists checks if an item exists in or not. Does not lock access to the itemService, expects this to
-// be done by the calling method
 func (s *Service) itemExists(itemName string) bool {
 	item := Item{}
 	filterConfigDB := bson.M{"host": itemName}
@@ -377,7 +375,7 @@ func executeCmd(hostname string, cmds []string, config *ssh.ClientConfig) string
 		stdinBuf.Write([]byte(cmd + "\n"))
 		for {
 			stdoutBuf := make([]byte, 1000000)
-			time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 40)
 			byteCount, err := stdBuf.Read(stdoutBuf)
 			if err != nil {
 				log.Fatal(err)
