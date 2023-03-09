@@ -8,6 +8,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/meirizal/terraform-experiment/api/client"
 	"github.com/meirizal/terraform-experiment/api/server"
 )
@@ -45,21 +46,6 @@ func validateInterfaceType(v interface{}, k string) (ws []string, es []error) {
 	list := []string{"GigabitEthernet", "TwoGigabitEthernet", "FiveGigabitEthernet", "TenGigabitEthernet", "TwentyFiveGigE", "FortyGigabitEthernet", "HundredGigE", "TwoHundredGigE", "FourHundredGigE"}
 	if !slices.Contains(list, value) {
 		errs = append(errs, fmt.Errorf("Interface type is not valid. Got %s", value))
-		return warns, errs
-	}
-	return warns, errs
-}
-func validateStringWhiteSpace(v interface{}, k string) (ws []string, es []error) {
-
-	var errs []error
-	var warns []string
-	value, ok := v.(string)
-	if !ok {
-		errs = append(errs, fmt.Errorf("Expected name to be string"))
-		return warns, errs
-	}
-	if strings.Contains(value, " ") {
-		errs = append(errs, fmt.Errorf("Value cannot contain whitespace"))
 		return warns, errs
 	}
 	return warns, errs
@@ -110,11 +96,13 @@ func resourceItem() *schema.Resource {
 				Optional:     true,
 				Description:  "IPv4",
 				RequiredWith: []string{"ipv4_address_mask"},
+				ValidateFunc: validation.IsIPv4Address,
 			},
 			"ipv4_address_mask": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				Description: "IPv4 mask",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Description:  "IPv4 mask",
+				ValidateFunc: validation.IsIPv4Address,
 			},
 			"mtu": {
 				Type:        schema.TypeInt,
@@ -129,13 +117,13 @@ func resourceItem() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Description:  "Service Policy Input",
-				ValidateFunc: validateStringWhiteSpace,
+				ValidateFunc: validation.StringIsNotWhiteSpace,
 			},
 			"service_policy_output": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Description:  "Service Policy output",
-				ValidateFunc: validateStringWhiteSpace,
+				ValidateFunc: validation.StringIsNotWhiteSpace,
 			},
 		},
 		Create: resourceCreateItem,

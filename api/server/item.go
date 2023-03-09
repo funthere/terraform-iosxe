@@ -41,8 +41,6 @@ const templateFileDelete = "api/template/iosxe_interface_ethernet_delete.cfg"
 
 // GetItems returns all of the Items that exist in the server
 func (s *Service) GetItems(w http.ResponseWriter, r *http.Request) {
-	// item := Item{}
-	// s.items[item.Host] = item
 	err := json.NewEncoder(w).Encode(map[string]Item{})
 	if err != nil {
 		log.Println(err)
@@ -139,7 +137,7 @@ func (s *Service) PutItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get existing data first, then update.
-	filterConfigDB := bson.M{"host": itemName, "type": item.IntfType, "number": item.Number}
+	filterConfigDB := bson.M{"host": itemName, "intftype": item.IntfType, "number": item.Number}
 	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
 	err = s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).Decode(&old)
 
@@ -201,7 +199,7 @@ func (s *Service) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get existing data first, then update.
-	filterConfigDB := bson.M{"host": itemName, "type": item.IntfType, "number": item.Number}
+	filterConfigDB := bson.M{"host": itemName, "intftype": item.IntfType, "number": item.Number}
 	opts := options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})
 	err = s.db.Collection("config_log").FindOne(context.TODO(), filterConfigDB, opts).Decode(&item)
 
@@ -372,6 +370,7 @@ func executeCmd(hostname string, cmds []string, config *ssh.ClientConfig) string
 	var cmd_output string
 
 	for _, cmd := range cmds {
+		errorFlag := false
 		stdinBuf.Write([]byte(cmd + "\n"))
 		for {
 			stdoutBuf := make([]byte, 1000000)
@@ -381,11 +380,19 @@ func executeCmd(hostname string, cmds []string, config *ssh.ClientConfig) string
 				log.Fatal(err)
 			}
 			cmd_output += string(stdoutBuf[:byteCount])
+
+			if strings.Contains(string(stdoutBuf[:byteCount]), "syntax error") {
+				errorFlag = true
+				break
+			}
 			if !(strings.Contains(string(stdoutBuf[:byteCount]), "More")) {
 				break
 			}
 			stdinBuf.Write([]byte(" "))
+		}
 
+		if errorFlag {
+			break
 		}
 	}
 

@@ -7,7 +7,7 @@ require (
 	github.com/hashicorp/terraform-plugin-sdk v1.17.2
 	go.mongodb.org/mongo-driver v1.11.2
 	golang.org/x/crypto v0.1.0
-	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2
+	golang.org/x/exp v0.0.0-20230307190834-24139beb5833
 )
 
 require (
@@ -85,6 +85,6 @@ require (
 	google.golang.org/api v0.34.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d // indirect
-	google.golang.org/grpc v1.51.0 // indirect
+	google.golang.org/grpc v1.51.0-dev // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
