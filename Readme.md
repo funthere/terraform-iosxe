@@ -1,6 +1,5 @@
 # Building a Terraform Provider
 
-Code to accompany the [Building a Terraform Provider](https://medium.com/spaceapetech/creating-a-terraform-provider-part-1-ed12884e06d7) blog.
 
 Consists of several components
 
@@ -13,7 +12,7 @@ Consists of several components
 
 ## Requirements
 
-* go => 1.11
+* go => 1.18
 
 This project used Go Modules, so you will need to enable them using `export GO111MODULE=on`, otherwise your go commands (run, build and test) will fail.
 
@@ -21,13 +20,6 @@ This project used Go Modules, so you will need to enable them using `export GO11
 
 The API is pretty simple, it just stores items which have a name, description and some tags, tags are a slice of strings. Name serves as the id for the Item. 
 
-``` go
-type Item struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-}
-```
 
 ### Routes
 
